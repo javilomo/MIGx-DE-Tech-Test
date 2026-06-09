@@ -1,0 +1,16 @@
+# ---- Core Data Processing ----
+pandas>=2.0.0
+# Alternative: polars>=0.20.0 (If you decide to use Polars for performance)
+
+# ---- Data Quality & Validation ----
+pydantic>=2.0.0
+email-validator>=2.0.0  # Optional: standard helper often required by Pydantic
+
+# ---- Database Connectivity ----
+psycopg2-binary>=2.9.0  # Direct PostgreSQL adapter for Python
+
+# ---- Environment & Configuration ----
+python-dotenv>=1.0.0    # Loads variables from the .env file
+
+# ---- Testing Framework ----
+pytest>=7.0.0           # For unit testing and data quality checks
