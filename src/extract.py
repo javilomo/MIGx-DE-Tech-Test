@@ -1,16 +1,34 @@
-import pandas as pd
 import os
+import glob
+import logging
+from typing import List, Tuple
 
-def extract_csv(file_path: str) -> pd.DataFrame:
+def extract_raw_xmls(directory_path: str) -> List[Tuple[str, str]]:
     """
-    Ingests the raw CSV file into a pandas DataFrame.
+    Scans the local source directory for XML files and reads their raw text content.
+    Does not validate or parse the XML structure to strictly comply with Bronze guidelines.
     """
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"Target clinical trials file not found at: {file_path}")
+    
+    # Look for all xml files in the raw folder
+    search_pattern = os.path.join(directory_path, "*.xml")
+    xml_files = glob.glob(search_pattern)
+    
+    if not xml_files:
+        logging.warning(f"No XML files found in target directory: {directory_path}")
+        return []
         
-    try:
-        # Read all columns as object/string initially to prevent pandas from 
-        # making incorrect type inferences before Pydantic validation
-        return pd.read_csv(file_path, dtype=str)
-    except Exception as e:
-        raise RuntimeError(f"Unexpected error while reading CSV file: {e}")
+    raw_payloads = []
+    for file_path in xml_files:
+        try:
+            file_name = os.path.basename(file_path)
+            
+            # Open with explicit UTF-8 encoding to avoid encoding issues with raw text blocks
+            with open(file_path, 'r', encoding='utf-8') as file:
+                raw_xml_content = file.read()
+                raw_payloads.append((file_name, raw_xml_content))
+                
+        except Exception as e:
+            # Fault tolerance: log individual file read failures but keep the pipeline moving
+            logging.error(f"Critical error reading file {file_path}: {e}")
+            
+    return raw_payloads
