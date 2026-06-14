@@ -1,20 +1,16 @@
 import logging
 
 def get_elt_transformation_query() -> str:
-    """
-    Returns the core SQL query executing the database-driven transformation.
-    Tailored specifically to handle official ClinicalTrials.gov XML structures,
-    extracting multi-layered elements via strict, fast-indexed XPath routing.
-    """
     return """
     WITH verified_bronze AS (
         SELECT 
             id AS bronze_id,
             file_name,
-            -- Force clean XML rendering stripping formatting anomalies
             CAST(raw_xml_content AS XML) as xml_data 
         FROM bronze_clinical_trials
-        WHERE xml_is_well_formed(raw_xml_content) = TRUE
+        WHERE position('{' in raw_xml_content) != 1 
+          AND position('<' in raw_xml_content) = 1
+          AND xml_is_well_formed(raw_xml_content) = TRUE
     ),
     extracted_fields AS (
         SELECT
@@ -23,7 +19,6 @@ def get_elt_transformation_query() -> str:
             
             -- Core Multi-layered Identity mapping
             (xpath('/clinical_study/id_info/nct_id/text()', xml_data))[1]::text AS trial_id,
-            COALESCE((xpath('/clinical_study/condition/text()', xml_data))[1]::text, 'Unknown Condition') AS condition_name,
             COALESCE((xpath('/clinical_study/overall_status/text()', xml_data))[1]::text, 'Unknown') AS status_name,
             COALESCE((xpath('/clinical_study/phase/text()', xml_data))[1]::text, 'N/A') AS phase_name,
             COALESCE((xpath('/clinical_study/study_type/text()', xml_data))[1]::text, 'Unknown Type') AS study_type_name,
@@ -36,6 +31,9 @@ def get_elt_transformation_query() -> str:
             -- Metadata Metrics & Numerical properties
             COALESCE((xpath('/clinical_study/enrollment/text()', xml_data))[1]::text, '0')::integer AS enrollment,
             (xpath('/clinical_study/start_date/text()', xml_data))[1]::text AS raw_start_date,
+            
+            -- EXTRAEMOS EL ARRAY COMPLETO DE CONDICIONES
+            xpath('/clinical_study/condition/text()', xml_data) AS conditions_array,
             
             -- Sub-node Arrays mapping directly into M:N bridges
             xpath('/clinical_study/sponsors/lead_sponsor/agency/text()', xml_data) AS lead_sponsor_array,

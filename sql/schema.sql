@@ -72,8 +72,7 @@ CREATE TABLE IF NOT EXISTS dim_interventions (
 -- SILVER LAYER: Central Fact Table
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS fact_trials (
-    trial_id VARCHAR(50) PRIMARY KEY, -- Master NCT ID
-    condition_id INT REFERENCES dim_conditions(condition_id),
+    trial_id VARCHAR(50) PRIMARY KEY,
     status_id INT REFERENCES dim_statuses(status_id),
     phase_id INT REFERENCES dim_phases(phase_id),
     study_type_id INT REFERENCES dim_study_types(study_type_id),
@@ -103,4 +102,10 @@ CREATE TABLE IF NOT EXISTS bridge_trial_interventions (
     trial_id VARCHAR(50) REFERENCES fact_trials(trial_id) ON DELETE CASCADE,
     intervention_id INT REFERENCES dim_interventions(intervention_id) ON DELETE RESTRICT,
     PRIMARY KEY (trial_id, intervention_id)
+);
+
+CREATE TABLE IF NOT EXISTS bridge_trial_conditions (
+    trial_id VARCHAR(50) REFERENCES fact_trials(trial_id) ON DELETE CASCADE,
+    condition_id INT REFERENCES dim_conditions(condition_id) ON DELETE RESTRICT,
+    PRIMARY KEY (trial_id, condition_id)
 );
