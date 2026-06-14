@@ -1,53 +1,75 @@
-import logging
 import os
-from config.settings import get_db_connection
-from src.extract import extract_raw_xmls
-from src.load import load_to_bronze
+import sys
+import logging
+import psycopg2
+from dotenv import load_dotenv
 
-# Setup professional logging format
+# Import pipeline orchestrators
+from src.schema import init_database_schema
+from src.extract import run_bronze_ingestion 
+from src.transform import run_elt_pipeline
+
+# Industrial logging configuration
 logging.basicConfig(
-    level=logging.INFO, 
-    format='%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 
-def run_bronze_pipeline():
+def get_db_connection():
     """
-    Orchestrates the Bronze Layer ingestion. 
-    Extracts raw XML files from the local filesystem and loads them 
-    directly into the PostgreSQL staging area.
+    Builds an isolated connection to the PostgreSQL engine using environment variables.
     """
-    logging.info("🚀 Starting Medallion Pipeline: BRONZE LAYER INGESTION")
-    
-    # Define source directory for raw clinical trials
-    raw_data_dir = "data/raw"
-    
-    # Step 1: EXTRACT - Scan and read local XML files
-    logging.info(f"📁 Scanning source directory: '{raw_data_dir}' for clinical trial XMLs...")
-    raw_xml_payloads = extract_raw_xmls(raw_data_dir)
-    
-    if not raw_xml_payloads:
-        logging.warning("⚠️ Ingestion halted: No XML files were found or successfully read. Check your data/raw folder.")
-        return
-
-    logging.info(f"📥 Extraction successful. Loaded {len(raw_xml_payloads)} files into memory payload.")
-    
-    # Step 2: LOAD - Establish connection and bulk insert into PostgreSQL Bronze Table
-    logging.info("🔌 Connecting to PostgreSQL database...")
-    db_connection = None
+    load_dotenv()
     try:
-        db_connection = get_db_connection()
-        
-        logging.info("💾 Executing bulk load into 'bronze_clinical_trials' table...")
-        load_to_bronze(raw_xml_payloads, db_connection)
-        
-        logging.info("🏁 BRONZE LAYER pipeline execution finalized successfully!")
-        
+        conn = psycopg2.connect(
+            host=os.getenv("DB_HOST", "localhost"),
+            database=os.getenv("DB_NAME", "clinical_trials_db"),
+            user=os.getenv("DB_USER", "postgres"),
+            password=os.getenv("DB_PASSWORD", "postgres"),
+            port=os.getenv("DB_PORT", "5432")
+        )
+        return conn
     except Exception as e:
-        logging.critical(f"❌ Critical Pipeline Failure during Bronze Phase: {e}")
+        logging.critical(f"❌ Target Database cluster unreachable: {e}")
+        sys.exit(1)
+
+def main():
+    logging.info("🚀 Booting up ClinicalTrials.gov ELT Engine Pipeline...")
+    
+    # Connect to PostgreSQL cluster
+    conn = get_db_connection()
+    
+    try:
+        # =====================================================================
+        # INFRASTRUCTURE DEPLOYMENT: Deploy Schemas if non-existent
+        # =====================================================================
+        init_database_schema(conn)
+        
+        # =====================================================================
+        # PHASE 1: EXTRACT & LOAD (EL) -> Structural Landing into Bronze
+        # =====================================================================
+        logging.info("=== PHASE 1: Initiating Raw File Landing into Bronze ===")
+        run_bronze_ingestion(conn)
+        
+        # =====================================================================
+        # PHASE 2: TRANSFORM (T) -> Pure Relational Spark-Like Parsing inside DB
+        # =====================================================================
+        logging.info("=== PHASE 2: Running Heavy Database-Native Transformations ===")
+        run_elt_pipeline(conn)
+        
+        logging.info("🎉 Execution complete. Data Lakehouse Architecture Synchronized.")
+        
+    except Exception as pipeline_error:
+        logging.critical(f"💥 Pipeline collapsed due to unhandled exception: {pipeline_error}")
+        sys.exit(1)
+        
     finally:
-        if db_connection:
-            db_connection.close()
-            logging.info("🔌 Database connection closed cleanly.")
+        if conn:
+            conn.close()
+            logging.info("🔌 Connection context returned to database connection pool cleanly.")
 
 if __name__ == "__main__":
-    run_bronze_pipeline()
+    main()
