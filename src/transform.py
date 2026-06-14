@@ -3,7 +3,8 @@ import logging
 def get_elt_transformation_query() -> str:
     """
     Returns the complete, high-performance SQL query for database-driven transformation.
-    Converts PostgreSQL arrays to plain strings to guarantee safe parsing in Python.
+    Extracts core entities, descriptive attributes (title, url), conditions, 
+    sponsors, interventions, and locations as native text arrays.
     """
     return """
     WITH verified_bronze AS (
@@ -19,8 +20,11 @@ def get_elt_transformation_query() -> str:
             bronze_id,
             file_name,
             
-            -- Identity Fields
+            -- Identity & Degenerate Descriptive Fields
             (xpath('/clinical_study/id_info/nct_id/text()', xml_data))[1]::text AS trial_id,
+            (xpath('/clinical_study/brief_title/text()', xml_data))[1]::text AS title,
+            (xpath('/clinical_study/required_header/url/text()', xml_data))[1]::text AS url,
+            
             COALESCE((xpath('/clinical_study/overall_status/text()', xml_data))[1]::text, 'Unknown') AS status_name,
             COALESCE((xpath('/clinical_study/phase/text()', xml_data))[1]::text, 'N/A') AS phase_name,
             COALESCE((xpath('/clinical_study/study_type/text()', xml_data))[1]::text, 'Unknown Type') AS study_type_name,
@@ -54,6 +58,15 @@ def get_elt_transformation_query() -> str:
     )
     SELECT * FROM extracted_fields WHERE trial_id IS NOT NULL;
     """
+
+def run_elt_pipeline(conn) -> None:
+    """
+    Triggers the database-driven ELT Transformation workflow.
+    """
+    import logging
+    logging.info("🧠 Initializing database-driven ELT Transformation in PostgreSQL...")
+    from src.load import load_silver_elt
+    load_silver_elt(conn)
 
 def run_elt_pipeline(conn) -> None:
     """

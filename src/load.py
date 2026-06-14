@@ -69,13 +69,15 @@ def load_silver_elt(conn) -> None:
             study_design_id = cursor.fetchone()[0]
 
             # -----------------------------------------------------------------
-            # STEP 2: LOAD CENTRAL FACT TABLE (fact_trials)
+            # STEP 2: LOAD CENTRAL FACT TABLE (fact_trials with Title and URL)
             # -----------------------------------------------------------------
             start_date = parse_clinical_date(row['raw_start_date'])
+            trial_title = row['title'].strip() if row['title'] else None
+            trial_url = row['url'].strip() if row['url'] else None
             
             cursor.execute("""
-                INSERT INTO fact_trials (trial_id, status_id, phase_id, study_type_id, study_design_id, enrollment, start_date, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                INSERT INTO fact_trials (trial_id, status_id, phase_id, study_type_id, study_design_id, enrollment, start_date, title, url, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                 ON CONFLICT (trial_id) DO UPDATE SET
                     status_id = EXCLUDED.status_id,
                     phase_id = EXCLUDED.phase_id,
@@ -83,8 +85,10 @@ def load_silver_elt(conn) -> None:
                     study_design_id = EXCLUDED.study_design_id,
                     enrollment = EXCLUDED.enrollment,
                     start_date = EXCLUDED.start_date,
+                    title = EXCLUDED.title,
+                    url = EXCLUDED.url,
                     updated_at = CURRENT_TIMESTAMP;
-            """, (trial_id, status_id, phase_id, study_type_id, study_design_id, row['enrollment'], start_date))
+            """, (trial_id, status_id, phase_id, study_type_id, study_design_id, row['enrollment'], start_date, trial_title, trial_url))
 
             # -----------------------------------------------------------------
             # STEP 3: RECONCILE M:N BRIDGE RELATIONSHIPS
@@ -105,7 +109,7 @@ def load_silver_elt(conn) -> None:
                             INSERT INTO bridge_trial_conditions (trial_id, condition_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;
                         """, (trial_id, condition_id))
 
-            # 3B. Sponsors M:N (Safe Split Breakdown via Custom Pipeline Delimiter)
+            # 3B. Sponsors M:N
             sponsors = []
             
             if row.get('lead_sponsors_str'):
@@ -152,7 +156,7 @@ def load_silver_elt(conn) -> None:
                             ON CONFLICT DO NOTHING;
                         """, (trial_id, intervention_id))
 
-            # 3D. Locations M:N (Safe Text Array Parallel Iteration)
+            # 3D. Locations M:N
             if row['location_countries'] and row['location_facility_names']:
                 cities = row['location_cities'] if row['location_cities'] else []
                 states = row['location_states'] if row['location_states'] else []

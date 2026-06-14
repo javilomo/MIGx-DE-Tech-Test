@@ -73,11 +73,13 @@ CREATE TABLE IF NOT EXISTS dim_interventions (
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS fact_trials (
     trial_id VARCHAR(50) PRIMARY KEY,
+    title TEXT,
     status_id INT REFERENCES dim_statuses(status_id),
     phase_id INT REFERENCES dim_phases(phase_id),
     study_type_id INT REFERENCES dim_study_types(study_type_id),
     study_design_id INT REFERENCES dim_study_designs(study_design_id),
     enrollment INT,
+    url TEXT,
     start_date DATE,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
