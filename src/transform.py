@@ -3,7 +3,7 @@ import logging
 def get_elt_transformation_query() -> str:
     """
     Returns the complete, high-performance SQL query for database-driven transformation.
-    Extracts core entities, conditions, sponsors, interventions, and locations as native text arrays.
+    Converts PostgreSQL arrays to plain strings to guarantee safe parsing in Python.
     """
     return """
     WITH verified_bronze AS (
@@ -36,8 +36,10 @@ def get_elt_transformation_query() -> str:
             
             -- Bridges Arrays (M:N)
             xpath('/clinical_study/condition/text()', xml_data) AS conditions_array,
-            xpath('/clinical_study/sponsors/lead_sponsor/agency/text()', xml_data) AS lead_sponsor_array,
-            xpath('/clinical_study/sponsors/collaborator/agency/text()', xml_data) AS collaborators_array,
+            
+            -- Safe String Conversion for Sponsors (Using internal pipeline delimiter '||')
+            array_to_string(xpath('/clinical_study/sponsors/lead_sponsor/agency/text()', xml_data)::text[], '||') AS lead_sponsors_str,
+            array_to_string(xpath('/clinical_study/sponsors/collaborator/agency/text()', xml_data)::text[], '||') AS collaborators_str,
             
             -- Interventions Arrays (Text)
             xpath('/clinical_study/intervention/intervention_type/text()', xml_data)::text[] AS intervention_types,

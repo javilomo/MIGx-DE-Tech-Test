@@ -3,6 +3,10 @@ from datetime import datetime
 from src.transform import get_elt_transformation_query
 
 def parse_clinical_date(raw_date_str: str) -> str:
+    """
+    Cleans clinical trial dates into a relational standard ISO format (YYYY-MM-DD).
+    Handles mixed granularities such as 'January 15, 2024' or 'December 2025'.
+    """
     if not raw_date_str:
         return None
     clean_val = raw_date_str.split('type=')[0].strip()
@@ -14,6 +18,11 @@ def parse_clinical_date(raw_date_str: str) -> str:
     return None
 
 def load_silver_elt(conn) -> None:
+    """
+    Populates the Silver Snowflake dimensional models and maps cross-relational 
+    bridge tables using strict SQL Upserts to ensure system idempotency.
+    Supports M:N mapping for conditions, sponsors, interventions, and locations.
+    """
     cursor = conn.cursor()
     try:
         transform_query = get_elt_transformation_query()
@@ -96,13 +105,18 @@ def load_silver_elt(conn) -> None:
                             INSERT INTO bridge_trial_conditions (trial_id, condition_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;
                         """, (trial_id, condition_id))
 
-            # 3B. Sponsors M:N
+            # 3B. Sponsors M:N (Safe Split Breakdown via Custom Pipeline Delimiter)
             sponsors = []
-            if row['lead_sponsor_array']:
-                sponsors.append((str(row['lead_sponsor_array'][0]), "Lead Sponsor"))
-            if row['collaborators_array']:
-                for col in row['collaborators_array']:
-                    sponsors.append((str(col), "Collaborator"))
+            
+            if row.get('lead_sponsors_str'):
+                for lead in row['lead_sponsors_str'].split('||'):
+                    if lead and lead.strip():
+                        sponsors.append((lead.strip(), "Lead Sponsor"))
+                        
+            if row.get('collaborators_str'):
+                for col in row['collaborators_str'].split('||'):
+                    if col and col.strip():
+                        sponsors.append((col.strip(), "Collaborator"))
 
             for name, role in sponsors:
                 cursor.execute("""
@@ -140,7 +154,6 @@ def load_silver_elt(conn) -> None:
 
             # 3D. Locations M:N (Safe Text Array Parallel Iteration)
             if row['location_countries'] and row['location_facility_names']:
-                # Pad state arrays to prevent index drops in zip logic
                 cities = row['location_cities'] if row['location_cities'] else []
                 states = row['location_states'] if row['location_states'] else []
                 
@@ -151,7 +164,6 @@ def load_silver_elt(conn) -> None:
                     c_name = str(country).strip()
                     f_name = str(facility).strip()
                     
-                    # Safe boundaries mapping out indices
                     city_name = str(cities[idx]).strip() if idx < len(cities) else 'Unknown City'
                     state_name = str(states[idx]).strip() if idx < len(states) else None
 
