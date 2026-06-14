@@ -3,10 +3,6 @@ from datetime import datetime
 from src.transform import get_elt_transformation_query
 
 def parse_clinical_date(raw_date_str: str) -> str:
-    """
-    Cleans clinical trial dates into a relational standard ISO format (YYYY-MM-DD).
-    Handles mixed granularities such as 'January 15, 2024' or 'December 2025'.
-    """
     if not raw_date_str:
         return None
     clean_val = raw_date_str.split('type=')[0].strip()
@@ -18,14 +14,8 @@ def parse_clinical_date(raw_date_str: str) -> str:
     return None
 
 def load_silver_elt(conn) -> None:
-    """
-    Populates the Silver Snowflake dimensional models and maps cross-relational 
-    bridge tables using strict SQL Upserts to ensure system idempotency.
-    Supports M:N mapping for multiple conditions per trial.
-    """
     cursor = conn.cursor()
     try:
-        # Fetch data processed by the database transformation query
         transform_query = get_elt_transformation_query()
         cursor.execute(transform_query)
         transformed_rows = cursor.fetchall()
@@ -38,34 +28,29 @@ def load_silver_elt(conn) -> None:
             trial_id = row['trial_id']
             
             if not trial_id:
-                continue # Protect data integrity from missing master records
+                continue
 
             # -----------------------------------------------------------------
-            # STEP 1: POPULATE 1:N DIMENSIONS (Using SQL Conflict Resolution)
+            # STEP 1: POPULATE 1:N DIMENSIONS
             # -----------------------------------------------------------------
-            
-            # dim_statuses
             cursor.execute("""
                 INSERT INTO dim_statuses (status_name) VALUES (%s)
                 ON CONFLICT (status_name) DO UPDATE SET status_name = EXCLUDED.status_name RETURNING status_id;
             """, (row['status_name'],))
             status_id = cursor.fetchone()[0]
 
-            # dim_phases
             cursor.execute("""
                 INSERT INTO dim_phases (phase_name) VALUES (%s)
                 ON CONFLICT (phase_name) DO UPDATE SET phase_name = EXCLUDED.phase_name RETURNING phase_id;
             """, (row['phase_name'],))
             phase_id = cursor.fetchone()[0]
 
-            # dim_study_types
             cursor.execute("""
                 INSERT INTO dim_study_types (study_type_name) VALUES (%s)
                 ON CONFLICT (study_type_name) DO UPDATE SET study_type_name = EXCLUDED.study_type_name RETURNING study_type_id;
             """, (row['study_type_name'],))
             study_type_id = cursor.fetchone()[0]
 
-            # dim_study_designs
             cursor.execute("""
                 INSERT INTO dim_study_designs (design_allocation, design_intervention_model, design_masking)
                 VALUES (%s, %s, %s)
@@ -96,7 +81,7 @@ def load_silver_elt(conn) -> None:
             # STEP 3: RECONCILE M:N BRIDGE RELATIONSHIPS
             # -----------------------------------------------------------------
 
-            # 3A. Process Multiple Conditions per Trial (M:N Bridge Migration)
+            # 3A. Conditions M:N
             if row['conditions_array']:
                 for cond_name_raw in row['conditions_array']:
                     cond_name = str(cond_name_raw).strip()
@@ -111,7 +96,7 @@ def load_silver_elt(conn) -> None:
                             INSERT INTO bridge_trial_conditions (trial_id, condition_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;
                         """, (trial_id, condition_id))
 
-            # 3B. Sponsors Processing
+            # 3B. Sponsors M:N
             sponsors = []
             if row['lead_sponsor_array']:
                 sponsors.append((str(row['lead_sponsor_array'][0]), "Lead Sponsor"))
@@ -131,22 +116,35 @@ def load_silver_elt(conn) -> None:
                     ON CONFLICT (trial_id, sponsor_id) DO UPDATE SET sponsor_role = EXCLUDED.sponsor_role;
                 """, (trial_id, sponsor_id, role))
 
-            # 3C. Safe Location Arrays Mapping (Processed via pre-extracted nodes to avoid nested sub-queries)
-            if row['location_nodes']:
-                for loc_data in row['location_nodes']:
-                    if not loc_data or '{' in str(loc_data):
-                        continue
-                    try:
-                        # Internal processing hook for raw nodes if required by analytics downstream
-                        pass
-                    except Exception:
-                        continue
+            # 3C. Interventions M:N (Safe Text Array Iteration)
+            if row['intervention_names'] and row['intervention_types']:
+                # Iterate through zipped text pairs safely
+                for i_type, i_name in zip(row['intervention_types'], row['intervention_names']):
+                    if i_name:
+                        i_name = str(i_name).strip()
+                        i_type = str(i_type).strip() if i_type else 'Other'
+                        
+                        cursor.execute("""
+                            INSERT INTO dim_interventions (intervention_type, intervention_name) 
+                            VALUES (%s, %s)
+                            ON CONFLICT (intervention_type, intervention_name) 
+                            DO UPDATE SET intervention_name = EXCLUDED.intervention_name 
+                            RETURNING intervention_id;
+                        """, (i_type, i_name))
+                        intervention_id = cursor.fetchone()[0]
+                        
+                        cursor.execute("""
+                            INSERT INTO bridge_trial_interventions (trial_id, intervention_id) 
+                            VALUES (%s, %s) 
+                            ON CONFLICT DO NOTHING;
+                        """, (trial_id, intervention_id))
 
     except Exception as e:
         conn.rollback()
         logging.error(f"❌ Critical runtime exception captured in loading transaction: {e}")
         raise e
-    finally:
+    else:
         conn.commit()
-        cursor.close()
         logging.info("🎉 ELT LOAD PHASE COMPLETED SUCCESSFULLY! Silver Warehouse layers fully up to date.")
+    finally:
+        cursor.close()
