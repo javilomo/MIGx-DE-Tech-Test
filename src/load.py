@@ -116,9 +116,8 @@ def load_silver_elt(conn) -> None:
                     ON CONFLICT (trial_id, sponsor_id) DO UPDATE SET sponsor_role = EXCLUDED.sponsor_role;
                 """, (trial_id, sponsor_id, role))
 
-            # 3C. Interventions M:N (Safe Text Array Iteration)
+            # 3C. Interventions M:N
             if row['intervention_names'] and row['intervention_types']:
-                # Iterate through zipped text pairs safely
                 for i_type, i_name in zip(row['intervention_types'], row['intervention_names']):
                     if i_name:
                         i_name = str(i_name).strip()
@@ -138,6 +137,48 @@ def load_silver_elt(conn) -> None:
                             VALUES (%s, %s) 
                             ON CONFLICT DO NOTHING;
                         """, (trial_id, intervention_id))
+
+            # 3D. Locations M:N (Safe Text Array Parallel Iteration)
+            if row['location_countries'] and row['location_facility_names']:
+                # Pad state arrays to prevent index drops in zip logic
+                cities = row['location_cities'] if row['location_cities'] else []
+                states = row['location_states'] if row['location_states'] else []
+                
+                for idx, (country, facility) in enumerate(zip(row['location_countries'], row['location_facility_names'])):
+                    if not country or not facility:
+                        continue
+                    
+                    c_name = str(country).strip()
+                    f_name = str(facility).strip()
+                    
+                    # Safe boundaries mapping out indices
+                    city_name = str(cities[idx]).strip() if idx < len(cities) else 'Unknown City'
+                    state_name = str(states[idx]).strip() if idx < len(states) else None
+
+                    # 1. Insert into dim_countries
+                    cursor.execute("""
+                        INSERT INTO dim_countries (country_name) VALUES (%s)
+                        ON CONFLICT (country_name) DO UPDATE SET country_name = EXCLUDED.country_name 
+                        RETURNING country_id;
+                    """, (c_name,))
+                    country_id = cursor.fetchone()[0]
+
+                    # 2. Insert into dim_locations
+                    cursor.execute("""
+                        INSERT INTO dim_locations (facility_name, city, state, country_id) 
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (facility_name, city, country_id) 
+                        DO UPDATE SET state = EXCLUDED.state 
+                        RETURNING location_id;
+                    """, (f_name, city_name, state_name, country_id))
+                    location_id = cursor.fetchone()[0]
+
+                    # 3. Connect via bridge_trial_locations
+                    cursor.execute("""
+                        INSERT INTO bridge_trial_locations (trial_id, location_id) 
+                        VALUES (%s, %s) 
+                        ON CONFLICT DO NOTHING;
+                    """, (trial_id, location_id))
 
     except Exception as e:
         conn.rollback()
