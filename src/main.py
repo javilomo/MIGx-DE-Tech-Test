@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from src.schema import init_database_schema
 from src.extract import run_bronze_ingestion 
 from src.transform import run_elt_pipeline
+from src.gold import build_gold_layer_views
 
 # Industrial logging configuration
 logging.basicConfig(
@@ -61,6 +62,12 @@ def main():
         run_elt_pipeline(conn)
         
         logging.info("🎉 Execution complete. Data Lakehouse Architecture Synchronized.")
+
+        # =====================================================================
+        # PHASE 3: VIEW (V) -> Gold layer's views
+        # =====================================================================
+
+        build_gold_layer_views(conn)
         
     except Exception as pipeline_error:
         logging.critical(f"💥 Pipeline collapsed due to unhandled exception: {pipeline_error}")
