@@ -69,15 +69,26 @@ def load_silver_elt(conn) -> None:
             study_design_id = cursor.fetchone()[0]
 
             # -----------------------------------------------------------------
-            # STEP 2: LOAD CENTRAL FACT TABLE (fact_trials with Title and URL)
+            # STEP 2: LOAD CENTRAL FACT TABLE (fact_trials with Descriptive Metas & Timeline)
             # -----------------------------------------------------------------
             start_date = parse_clinical_date(row['raw_start_date'])
+            primary_completion_date = parse_clinical_date(row['raw_primary_completion_date'])
+            completion_date = parse_clinical_date(row['raw_completion_date'])
+            first_posted = parse_clinical_date(row['raw_first_posted'])
+            results_first_posted = parse_clinical_date(row['raw_results_first_posted'])
+            last_update_posted = parse_clinical_date(row['raw_last_update_posted'])
+            
             trial_title = row['title'].strip() if row['title'] else None
             trial_url = row['url'].strip() if row['url'] else None
             
             cursor.execute("""
-                INSERT INTO fact_trials (trial_id, status_id, phase_id, study_type_id, study_design_id, enrollment, start_date, title, url, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                INSERT INTO fact_trials (
+                    trial_id, status_id, phase_id, study_type_id, study_design_id, 
+                    enrollment, start_date, primary_completion_date, completion_date, 
+                    first_posted, results_first_posted, last_update_posted, 
+                    title, url, updated_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                 ON CONFLICT (trial_id) DO UPDATE SET
                     status_id = EXCLUDED.status_id,
                     phase_id = EXCLUDED.phase_id,
@@ -85,10 +96,20 @@ def load_silver_elt(conn) -> None:
                     study_design_id = EXCLUDED.study_design_id,
                     enrollment = EXCLUDED.enrollment,
                     start_date = EXCLUDED.start_date,
+                    primary_completion_date = EXCLUDED.primary_completion_date,
+                    completion_date = EXCLUDED.completion_date,
+                    first_posted = EXCLUDED.first_posted,
+                    results_first_posted = EXCLUDED.results_first_posted,
+                    last_update_posted = EXCLUDED.last_update_posted,
                     title = EXCLUDED.title,
                     url = EXCLUDED.url,
                     updated_at = CURRENT_TIMESTAMP;
-            """, (trial_id, status_id, phase_id, study_type_id, study_design_id, row['enrollment'], start_date, trial_title, trial_url))
+            """, (
+                trial_id, status_id, phase_id, study_type_id, study_design_id, 
+                row['enrollment'], start_date, primary_completion_date, completion_date, 
+                first_posted, results_first_posted, last_update_posted, 
+                trial_title, trial_url
+            ))
 
             # -----------------------------------------------------------------
             # STEP 3: RECONCILE M:N BRIDGE RELATIONSHIPS

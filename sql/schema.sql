@@ -81,6 +81,11 @@ CREATE TABLE IF NOT EXISTS fact_trials (
     enrollment INT,
     url TEXT,
     start_date DATE,
+    primary_completion_date DATE,
+    completion_date DATE,
+    first_posted DATE,
+    results_first_posted DATE,
+    last_update_posted DATE,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

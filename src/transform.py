@@ -3,8 +3,8 @@ import logging
 def get_elt_transformation_query() -> str:
     """
     Returns the complete, high-performance SQL query for database-driven transformation.
-    Extracts core entities, descriptive attributes (title, url), conditions, 
-    sponsors, interventions, and locations as native text arrays.
+    Extracts core entities, descriptive attributes, life-cycle tracking dates, 
+    conditions, sponsors, interventions, and locations as native text arrays.
     """
     return """
     WITH verified_bronze AS (
@@ -34,9 +34,14 @@ def get_elt_transformation_query() -> str:
             (xpath('/clinical_study/study_design_info/intervention_model/text()', xml_data))[1]::text AS design_intervention_model,
             (xpath('/clinical_study/study_design_info/masking/text()', xml_data))[1]::text AS design_masking,
             
-            -- Metrics
+            -- Metrics & Tracking Dates
             COALESCE((xpath('/clinical_study/enrollment/text()', xml_data))[1]::text, '0')::integer AS enrollment,
             (xpath('/clinical_study/start_date/text()', xml_data))[1]::text AS raw_start_date,
+            (xpath('/clinical_study/primary_completion_date/text()', xml_data))[1]::text AS raw_primary_completion_date,
+            (xpath('/clinical_study/completion_date/text()', xml_data))[1]::text AS raw_completion_date,
+            (xpath('/clinical_study/study_first_posted/text()', xml_data))[1]::text AS raw_first_posted,
+            (xpath('/clinical_study/results_first_posted/text()', xml_data))[1]::text AS raw_results_first_posted,
+            (xpath('/clinical_study/last_update_posted/text()', xml_data))[1]::text AS raw_last_update_posted,
             
             -- Bridges Arrays (M:N)
             xpath('/clinical_study/condition/text()', xml_data) AS conditions_array,
@@ -58,15 +63,6 @@ def get_elt_transformation_query() -> str:
     )
     SELECT * FROM extracted_fields WHERE trial_id IS NOT NULL;
     """
-
-def run_elt_pipeline(conn) -> None:
-    """
-    Triggers the database-driven ELT Transformation workflow.
-    """
-    import logging
-    logging.info("🧠 Initializing database-driven ELT Transformation in PostgreSQL...")
-    from src.load import load_silver_elt
-    load_silver_elt(conn)
 
 def run_elt_pipeline(conn) -> None:
     """
