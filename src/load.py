@@ -21,7 +21,7 @@ def load_silver_elt(conn) -> None:
     """
     Populates the Silver Snowflake dimensional models and maps cross-relational 
     bridge tables using strict SQL Upserts to ensure system idempotency.
-    Supports M:N mapping for conditions, sponsors, interventions, and locations.
+    Table names use 'silver_' prefix, while column attributes remain clean.
     """
     cursor = conn.cursor()
     try:
@@ -43,25 +43,25 @@ def load_silver_elt(conn) -> None:
             # STEP 1: POPULATE 1:N DIMENSIONS
             # -----------------------------------------------------------------
             cursor.execute("""
-                INSERT INTO dim_statuses (status_name) VALUES (%s)
+                INSERT INTO silver_dim_statuses (status_name) VALUES (%s)
                 ON CONFLICT (status_name) DO UPDATE SET status_name = EXCLUDED.status_name RETURNING status_id;
             """, (row['status_name'],))
             status_id = cursor.fetchone()[0]
 
             cursor.execute("""
-                INSERT INTO dim_phases (phase_name) VALUES (%s)
+                INSERT INTO silver_dim_phases (phase_name) VALUES (%s)
                 ON CONFLICT (phase_name) DO UPDATE SET phase_name = EXCLUDED.phase_name RETURNING phase_id;
             """, (row['phase_name'],))
             phase_id = cursor.fetchone()[0]
 
             cursor.execute("""
-                INSERT INTO dim_study_types (study_type_name) VALUES (%s)
+                INSERT INTO silver_dim_study_types (study_type_name) VALUES (%s)
                 ON CONFLICT (study_type_name) DO UPDATE SET study_type_name = EXCLUDED.study_type_name RETURNING study_type_id;
             """, (row['study_type_name'],))
             study_type_id = cursor.fetchone()[0]
 
             cursor.execute("""
-                INSERT INTO dim_study_designs (design_allocation, design_intervention_model, design_masking)
+                INSERT INTO silver_dim_study_designs (design_allocation, design_intervention_model, design_masking)
                 VALUES (%s, %s, %s)
                 ON CONFLICT (design_allocation, design_intervention_model, design_masking) 
                 DO UPDATE SET design_allocation = EXCLUDED.design_allocation RETURNING study_design_id;
@@ -69,7 +69,7 @@ def load_silver_elt(conn) -> None:
             study_design_id = cursor.fetchone()[0]
 
             # -----------------------------------------------------------------
-            # STEP 2: LOAD CENTRAL FACT TABLE (fact_trials with Descriptive Metas & Timeline)
+            # STEP 2: LOAD CENTRAL FACT TABLE (silver_fact_trials)
             # -----------------------------------------------------------------
             start_date = parse_clinical_date(row['raw_start_date'])
             primary_completion_date = parse_clinical_date(row['raw_primary_completion_date'])
@@ -82,7 +82,7 @@ def load_silver_elt(conn) -> None:
             trial_url = row['url'].strip() if row['url'] else None
             
             cursor.execute("""
-                INSERT INTO fact_trials (
+                INSERT INTO silver_fact_trials (
                     trial_id, status_id, phase_id, study_type_id, study_design_id, 
                     enrollment, start_date, primary_completion_date, completion_date, 
                     first_posted, results_first_posted, last_update_posted, 
@@ -117,22 +117,25 @@ def load_silver_elt(conn) -> None:
 
             # 3A. Conditions M:N
             if row['conditions_array']:
-                for cond_name_raw in row['conditions_array']:
+                raw_conditions = row['conditions_array']
+                if isinstance(raw_conditions, str):
+                    raw_conditions = [raw_conditions]
+                
+                for cond_name_raw in raw_conditions:
                     cond_name = str(cond_name_raw).strip()
                     if cond_name:
                         cursor.execute("""
-                            INSERT INTO dim_conditions (condition_name) VALUES (%s)
+                            INSERT INTO silver_dim_conditions (condition_name) VALUES (%s)
                             ON CONFLICT (condition_name) DO UPDATE SET condition_name = EXCLUDED.condition_name RETURNING condition_id;
                         """, (cond_name,))
                         condition_id = cursor.fetchone()[0]
                         
                         cursor.execute("""
-                            INSERT INTO bridge_trial_conditions (trial_id, condition_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;
+                            INSERT INTO silver_bridge_trial_conditions (trial_id, condition_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;
                         """, (trial_id, condition_id))
 
             # 3B. Sponsors M:N
             sponsors = []
-            
             if row.get('lead_sponsors_str'):
                 for lead in row['lead_sponsors_str'].split('||'):
                     if lead and lead.strip():
@@ -145,13 +148,13 @@ def load_silver_elt(conn) -> None:
 
             for name, role in sponsors:
                 cursor.execute("""
-                    INSERT INTO dim_sponsors (sponsor_name) VALUES (%s)
+                    INSERT INTO silver_dim_sponsors (sponsor_name) VALUES (%s)
                     ON CONFLICT (sponsor_name) DO UPDATE SET sponsor_name = EXCLUDED.sponsor_name RETURNING sponsor_id;
                 """, (name,))
                 sponsor_id = cursor.fetchone()[0]
                 
                 cursor.execute("""
-                    INSERT INTO bridge_trial_sponsors (trial_id, sponsor_id, sponsor_role) VALUES (%s, %s, %s)
+                    INSERT INTO silver_bridge_trial_sponsors (trial_id, sponsor_id, sponsor_role) VALUES (%s, %s, %s)
                     ON CONFLICT (trial_id, sponsor_id) DO UPDATE SET sponsor_role = EXCLUDED.sponsor_role;
                 """, (trial_id, sponsor_id, role))
 
@@ -163,7 +166,7 @@ def load_silver_elt(conn) -> None:
                         i_type = str(i_type).strip() if i_type else 'Other'
                         
                         cursor.execute("""
-                            INSERT INTO dim_interventions (intervention_type, intervention_name) 
+                            INSERT INTO silver_dim_interventions (intervention_type, intervention_name) 
                             VALUES (%s, %s)
                             ON CONFLICT (intervention_type, intervention_name) 
                             DO UPDATE SET intervention_name = EXCLUDED.intervention_name 
@@ -172,7 +175,7 @@ def load_silver_elt(conn) -> None:
                         intervention_id = cursor.fetchone()[0]
                         
                         cursor.execute("""
-                            INSERT INTO bridge_trial_interventions (trial_id, intervention_id) 
+                            INSERT INTO silver_bridge_trial_interventions (trial_id, intervention_id) 
                             VALUES (%s, %s) 
                             ON CONFLICT DO NOTHING;
                         """, (trial_id, intervention_id))
@@ -192,17 +195,17 @@ def load_silver_elt(conn) -> None:
                     city_name = str(cities[idx]).strip() if idx < len(cities) else 'Unknown City'
                     state_name = str(states[idx]).strip() if idx < len(states) else None
 
-                    # 1. Insert into dim_countries
+                    # 1. Insert into silver_dim_countries
                     cursor.execute("""
-                        INSERT INTO dim_countries (country_name) VALUES (%s)
+                        INSERT INTO silver_dim_countries (country_name) VALUES (%s)
                         ON CONFLICT (country_name) DO UPDATE SET country_name = EXCLUDED.country_name 
                         RETURNING country_id;
                     """, (c_name,))
                     country_id = cursor.fetchone()[0]
 
-                    # 2. Insert into dim_locations
+                    # 2. Insert into silver_dim_locations
                     cursor.execute("""
-                        INSERT INTO dim_locations (facility_name, city, state, country_id) 
+                        INSERT INTO silver_dim_locations (facility_name, city, state, country_id) 
                         VALUES (%s, %s, %s, %s)
                         ON CONFLICT (facility_name, city, country_id) 
                         DO UPDATE SET state = EXCLUDED.state 
@@ -210,9 +213,9 @@ def load_silver_elt(conn) -> None:
                     """, (f_name, city_name, state_name, country_id))
                     location_id = cursor.fetchone()[0]
 
-                    # 3. Connect via bridge_trial_locations
+                    # 3. Connect via silver_bridge_trial_locations
                     cursor.execute("""
-                        INSERT INTO bridge_trial_locations (trial_id, location_id) 
+                        INSERT INTO silver_bridge_trial_locations (trial_id, location_id) 
                         VALUES (%s, %s) 
                         ON CONFLICT DO NOTHING;
                     """, (trial_id, location_id))

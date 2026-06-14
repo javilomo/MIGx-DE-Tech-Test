@@ -3,8 +3,8 @@ import logging
 def get_elt_transformation_query() -> str:
     """
     Returns the complete, high-performance SQL query for database-driven transformation.
-    Extracts core entities, descriptive attributes, life-cycle tracking dates, 
-    conditions, sponsors, interventions, and locations as native text arrays.
+    Guarantees that arrays are strictly cast to text[] to prevent Python 
+    string-splitting bugs during iteration.
     """
     return """
     WITH verified_bronze AS (
@@ -21,44 +21,44 @@ def get_elt_transformation_query() -> str:
             file_name,
             
             -- Identity & Degenerate Descriptive Fields
-            (xpath('/clinical_study/id_info/nct_id/text()', xml_data))[1]::text AS trial_id,
-            (xpath('/clinical_study/brief_title/text()', xml_data))[1]::text AS title,
-            (xpath('/clinical_study/required_header/url/text()', xml_data))[1]::text AS url,
+            (xpath('//id_info/nct_id/text()', xml_data))[1]::text AS trial_id,
+            (xpath('//brief_title/text()', xml_data))[1]::text AS title,
+            (xpath('//required_header/url/text()', xml_data))[1]::text AS url,
             
-            COALESCE((xpath('/clinical_study/overall_status/text()', xml_data))[1]::text, 'Unknown') AS status_name,
-            COALESCE((xpath('/clinical_study/phase/text()', xml_data))[1]::text, 'N/A') AS phase_name,
-            COALESCE((xpath('/clinical_study/study_type/text()', xml_data))[1]::text, 'Unknown Type') AS study_type_name,
+            COALESCE((xpath('//overall_status/text()', xml_data))[1]::text, 'Unknown') AS status_name,
+            COALESCE((xpath('//phase/text()', xml_data))[1]::text, 'N/A') AS phase_name,
+            COALESCE((xpath('//study_type/text()', xml_data))[1]::text, 'Unknown Type') AS study_type_name,
             
             -- Study Design
-            (xpath('/clinical_study/study_design_info/allocation/text()', xml_data))[1]::text AS design_allocation,
-            (xpath('/clinical_study/study_design_info/intervention_model/text()', xml_data))[1]::text AS design_intervention_model,
-            (xpath('/clinical_study/study_design_info/masking/text()', xml_data))[1]::text AS design_masking,
+            (xpath('//study_design_info/allocation/text()', xml_data))[1]::text AS design_allocation,
+            (xpath('//study_design_info/intervention_model/text()', xml_data))[1]::text AS design_intervention_model,
+            (xpath('//study_design_info/masking/text()', xml_data))[1]::text AS design_masking,
             
             -- Metrics & Tracking Dates
-            COALESCE((xpath('/clinical_study/enrollment/text()', xml_data))[1]::text, '0')::integer AS enrollment,
-            (xpath('/clinical_study/start_date/text()', xml_data))[1]::text AS raw_start_date,
-            (xpath('/clinical_study/primary_completion_date/text()', xml_data))[1]::text AS raw_primary_completion_date,
-            (xpath('/clinical_study/completion_date/text()', xml_data))[1]::text AS raw_completion_date,
-            (xpath('/clinical_study/study_first_posted/text()', xml_data))[1]::text AS raw_first_posted,
-            (xpath('/clinical_study/results_first_posted/text()', xml_data))[1]::text AS raw_results_first_posted,
-            (xpath('/clinical_study/last_update_posted/text()', xml_data))[1]::text AS raw_last_update_posted,
+            COALESCE((xpath('//enrollment/text()', xml_data))[1]::text, '0')::integer AS enrollment,
+            (xpath('//start_date/text()', xml_data))[1]::text AS raw_start_date,
+            (xpath('//primary_completion_date/text()', xml_data))[1]::text AS raw_primary_completion_date,
+            (xpath('//completion_date/text()', xml_data))[1]::text AS raw_completion_date,
+            (xpath('//study_first_posted/text()', xml_data))[1]::text AS raw_first_posted,
+            (xpath('//results_first_posted/text()', xml_data))[1]::text AS raw_results_first_posted,
+            (xpath('//last_update_posted/text()', xml_data))[1]::text AS raw_last_update_posted,
             
-            -- Bridges Arrays (M:N)
-            xpath('/clinical_study/condition/text()', xml_data) AS conditions_array,
+            -- Bridges Arrays (Garantizamos conversión explícita a array de texto)
+            xpath('//condition/text()', xml_data)::text[] AS conditions_array,
             
-            -- Safe String Conversion for Sponsors (Using internal pipeline delimiter '||')
-            array_to_string(xpath('/clinical_study/sponsors/lead_sponsor/agency/text()', xml_data)::text[], '||') AS lead_sponsors_str,
-            array_to_string(xpath('/clinical_study/sponsors/collaborator/agency/text()', xml_data)::text[], '||') AS collaborators_str,
+            -- Safe String Conversion for Sponsors
+            array_to_string(xpath('//sponsors/lead_sponsor/agency/text()', xml_data)::text[], '||') AS lead_sponsors_str,
+            array_to_string(xpath('//sponsors/collaborator/agency/text()', xml_data)::text[], '||') AS collaborators_str,
             
             -- Interventions Arrays (Text)
-            xpath('/clinical_study/intervention/intervention_type/text()', xml_data)::text[] AS intervention_types,
-            xpath('/clinical_study/intervention/intervention_name/text()', xml_data)::text[] AS intervention_names,
+            xpath('//intervention/intervention_type/text()', xml_data)::text[] AS intervention_types,
+            xpath('//intervention/intervention_name/text()', xml_data)::text[] AS intervention_names,
             
             -- Locations Geographies Extraction (Parallel Text Arrays)
-            xpath('/clinical_study/location/facility/name/text()', xml_data)::text[] AS location_facility_names,
-            xpath('/clinical_study/location/facility/address/city/text()', xml_data)::text[] AS location_cities,
-            xpath('/clinical_study/location/facility/address/state/text()', xml_data)::text[] AS location_states,
-            xpath('/clinical_study/location/facility/address/country/text()', xml_data)::text[] AS location_countries
+            xpath('//location/facility/name/text()', xml_data)::text[] AS location_facility_names,
+            xpath('//location/facility/address/city/text()', xml_data)::text[] AS location_cities,
+            xpath('//location/facility/address/state/text()', xml_data)::text[] AS location_states,
+            xpath('//location/facility/address/country/text()', xml_data)::text[] AS location_countries
         FROM verified_bronze
     )
     SELECT * FROM extracted_fields WHERE trial_id IS NOT NULL;
