@@ -125,7 +125,7 @@ Once the pipeline logs confirm a successful execution cycle, you can easily quer
 Access the running container's interactive psql instance directly by typing:
 
 ```text
-docker exec -it clinical_trials_postgres psql -U postgres -d clinical_trials_dw
+docker exec -it clinical_trials_postgres psql -U ${DB_USER} -d ${DB_NAME}
 ```
 
 (type \q to exit the prompt)
