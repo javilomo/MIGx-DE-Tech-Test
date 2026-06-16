@@ -61,7 +61,7 @@ def main():
         logging.info("=== PHASE 2: Running Heavy Database-Native Transformations ===")
         run_elt_pipeline(conn)
         
-        logging.info("🎉 Execution complete. Data Lakehouse Architecture Synchronized.")
+        logging.info("🎉 Execution complete. Architecture Synchronized.")
 
         # =====================================================================
         # PHASE 3: VIEW (V) -> Gold layer's views

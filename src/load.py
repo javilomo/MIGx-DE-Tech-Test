@@ -19,7 +19,7 @@ def parse_clinical_date(raw_date_str: str) -> str:
 
 def load_silver_elt(conn) -> None:
     """
-    Populates the Silver Snowflake dimensional models and maps cross-relational 
+    Populates the Silver dimensional models and maps cross-relational 
     bridge tables using strict SQL Upserts to ensure system idempotency.
     Table names use 'silver_' prefix, while column attributes remain clean.
     """
@@ -30,7 +30,7 @@ def load_silver_elt(conn) -> None:
         transformed_rows = cursor.fetchall()
         
         colnames = [desc[0] for desc in cursor.description]
-        logging.info(f"📥 Loading {len(transformed_rows)} records into Silver Snowflake Architecture...")
+        logging.info(f"📥 Loading {len(transformed_rows)} records into Silver Architecture...")
 
         for tuple_row in transformed_rows:
             row = dict(zip(colnames, tuple_row))

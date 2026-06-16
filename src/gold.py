@@ -93,6 +93,6 @@ def build_gold_layer_views(conn) -> None:
         raise e
     else:
         conn.commit()
-        logging.info("✨ GOLD ANALYTICAL SEMANTIC LAYER DEPLOYED SUCCESSFULLY! Vistas BI listas para usar.")
+        logging.info("✨ GOLD ANALYTICAL SEMANTIC LAYER DEPLOYED SUCCESSFULLY!")
     finally:
         cursor.close()
