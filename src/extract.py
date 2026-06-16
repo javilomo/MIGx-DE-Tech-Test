@@ -18,7 +18,7 @@ def get_raw_xml_files(data_dir: str) -> List[str]:
     logging.info(f"📂 Found {len(xml_files)} raw XML files for ingestion.")
     return xml_files
 
-def run_bronze_ingestion(conn, data_dir: str = "data/raw") -> None:
+def run_bronze_ingestion(conn, data_dir: str = "data") -> None:
     """
     Executes the 'Extract & Load' (EL) stage. Stream-dumps raw XML strings 
     directly into the Bronze staging table without modifying data contents.

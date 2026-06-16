@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS silver_dim_countries (
 
 CREATE TABLE IF NOT EXISTS silver_dim_locations (
     location_id SERIAL PRIMARY KEY,
-    facility_name VARCHAR(255) NOT NULL,
+    facility_name TEXT NOT NULL,
     city VARCHAR(100),
     state VARCHAR(100),
     country_id INT REFERENCES silver_dim_countries(country_id),

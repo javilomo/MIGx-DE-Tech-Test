@@ -1,30 +1,39 @@
 version: '3.8'
 
 services:
-  # Centralized relational database service for the Medallion Architecture
-  postgres_db:
+  # 1. Database Service (PostgreSQL Data Warehouse)
+  postgres_dw:
     image: postgres:15-alpine
     container_name: clinical_trials_postgres
-    restart: always
-    
-    # Dynamic environment variables injected from your local .env file
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
-      
-    # Port mapping: forwards the configured port from your host machine to the native Postgres port inside the container
     ports:
       - "${DB_PORT}:5432"
-      
-    # Data persistence and automated schema initialization volumes
     volumes:
-      # 1. DDL Automation: Runs the SQL script to create tables (Bronze, Silver, Gold) on the very first container startup
-      - ./sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql
-      
-      # 2. Persistence: Ensures your ingested data is not lost when the container is stopped or destroyed
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-# Definition of the managed volume handled natively by Docker
+  # 2. Pipeline Service (Your Python App)
+  data_pipeline:
+    build: .
+    container_name: clinical_trials_pipeline
+    environment:
+      - DB_HOST=postgres_dw
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      postgres_dw:
+        condition: service_healthy
+
 volumes:
   postgres_data:
