@@ -64,24 +64,26 @@ Here is a quick look at what I chose to prioritize, what the limits are, and how
 
 ## 📁 Repository Structure
 
-MIGX-DE-TECH-TEST
+```text
+MIGX-DE-TECH-TEST/
 ├── src/
-│   ├── schema.py       # Executes physical DDL constraints
-│   ├── extract.py      # Core extractor parsing raw feeds into Bronze
-│   ├── transform.py    # High-performance XPath ELT transformation engine
-│   ├── load.py         # Relational dimension loading and bridging mechanics
-│   ├── gold.py         # Automated semantic DDL view provisioning script
-│   └── main.py         # Pipeline orchestration master entry point
+│   ├── main.py          # The main switch; triggers the whole pipeline in order
+│   ├── extract.py       # Reads the raw XML files and loads them into Bronze
+│   ├── transform.py     # Cleans the text and extracts the nested fields
+│   ├── load.py          # Inserts the structured data into Silver (Facts & Dimensions)
+│   ├── gold.py          # Creates the final easy-to-query SQL Views
+│   └── schema.py        # Connects to the database to run the setup queries
 ├── config/
-│   └── config.py       # Database pooling context configuration
+│   └── config.py        # Handles database connections and .env settings
 ├── sql/
-│   ├── gold_layer.sql   # Gold layer's SQL definition
-│   └── schema.sql       # Bronze and silver layers' SQL definition
+│   ├── schema.sql       # SQL code to build the Bronze and Silver tables
+│   └── gold_layer.sql   # SQL code to build the final Gold analytical views
 ├── tests/
-│   └── test_pipeline.py # Data quality, parsing, and integration tests
-├── pytest.ini          # Test runner route configurations
-├── requirements.txt    # Managed project dependencies
-└── README.md           # Technical project documentationel
+│   └── test_pipeline.py # Automated tests for XML parsing and database logic
+├── pytest.ini           # Configuration file for running Pytest
+├── requirements.txt     # List of Python packages required for the project
+└── README.md            # This documentation guide
+```
 
 ## 🚀 Getting Started & Execution Guide
 
