@@ -1,7 +1,5 @@
--- 1. Crear el esquema analítico de consumo limpio
 CREATE SCHEMA IF NOT EXISTS gold;
 
--- 2. Vistas de Dimensiones de un solo paso (1:N)
 CREATE OR REPLACE VIEW gold.dim_statuses AS
 SELECT 
     status_id,
@@ -47,7 +45,7 @@ SELECT
     intervention_name AS intervention
 FROM silver_dim_interventions;
 
--- 3. Vista Geográfica Optimizada (Aplanando Países y Locaciones)
+-- Optimized geographic view
 CREATE OR REPLACE VIEW gold.v_locations_geography AS
 SELECT 
     l.location_id,
@@ -58,7 +56,7 @@ SELECT
 FROM silver_dim_locations l
 LEFT JOIN silver_dim_countries c ON l.country_id = c.country_id;
 
--- 4. Vistas Puentes Auxiliares M:N para Analistas (Muestran IDs y nombres directamente)
+-- Conditions per trial view
 CREATE OR REPLACE VIEW gold.v_trial_conditions_bridge AS
 SELECT 
     bc.trial_id,
@@ -67,6 +65,7 @@ SELECT
 FROM silver_bridge_trial_conditions bc
 JOIN silver_dim_conditions c ON bc.condition_id = c.condition_id;
 
+-- Sponsors per trial view
 CREATE OR REPLACE VIEW gold.v_trial_sponsors_bridge AS
 SELECT 
     bs.trial_id,
@@ -76,6 +75,7 @@ SELECT
 FROM silver_bridge_trial_sponsors bs
 JOIN silver_dim_sponsors s ON bs.sponsor_id = s.sponsor_id;
 
+-- Interventions per trial view
 CREATE OR REPLACE VIEW gold.v_trial_interventions_bridge AS
 SELECT 
     bi.trial_id,
@@ -85,9 +85,7 @@ SELECT
 FROM silver_bridge_trial_interventions bi
 JOIN silver_dim_interventions i ON bi.intervention_id = i.intervention_id;
 
--- 5. LA JOYA DE LA CORONA: Vista de Hechos Aplanada (gold.v_fact_trials_comprehensive)
--- Esta vista une las dimensiones 1:N principales para que el analista pueda hacer queries analíticas 
--- directas sin escribir infinitos JOINs complejos. Incluye además cálculo de métricas de tiempos.
+-- Flat facts view
 CREATE OR REPLACE VIEW gold.v_fact_trials_comprehensive AS
 SELECT 
     f.trial_id AS nct_number,
@@ -101,7 +99,7 @@ SELECT
     d.design_masking AS masking_type,
     f.enrollment AS target_enrollment,
     
-    -- Fechas del ciclo de vida
+    -- Dates
     f.start_date,
     f.primary_completion_date,
     f.completion_date,
@@ -109,7 +107,7 @@ SELECT
     f.results_first_posted,
     f.last_update_posted,
     
-    -- MÉTRICAS ANALÍTICAS CALCULADAS (KPIs de Líneas de Tiempo)
+    -- KPIs
     (f.completion_date - f.start_date) AS total_study_duration_days,
     (f.results_first_posted - f.completion_date) AS reporting_lag_days,
     (f.last_update_posted - f.first_posted) AS maintenance_lifecycle_days,
