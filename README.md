@@ -8,15 +8,6 @@ This repository contains a database-driven ELT (Extract, Load, Transform) data p
 
 The project decouples raw data ingestion from analytical querying by implementing three distinct data layers within the PostgreSQL database instance:
 
-[ Raw XML Files ] ──> 📂 BRONZE Layer (public.bronze_clinical_trials)
-│   (Strict PostgreSQL Native XML Well-Formed Validation)
-▼
-📂 SILVER Layer (Snowflake Dimensional Model / public.silver_)
-│   (Strict SQL Upserts & Idempotency Rules)
-▼
-📂 GOLD Layer   (Semantic Analytics / gold. Views)
-(Reporting, Aggregations & BI Tools Contract)
-
 1. **Bronze Layer (`public.bronze_clinical_trials`)**: Acts as the landing/staging area. It stores raw XML source strings alongside structural metadata (filenames, ingestion timestamps). A critical validation constraint (`xml_is_well_formed`) ensures corrupt payloads are caught instantly.
 2. **Silver Layer (`public.silver_*`)**: Implements a clean, standardized **Star Dimensional Schema**. It normalizes the unstructured XML into a central Fact Table (`silver_fact_trials`), 1:N dimensions, and strict M:N bridge tables. All relational entity definitions feature clean column identifiers, keeping infrastructure prefixes isolated strictly to table names.
 3. **Gold Layer (`gold.*` Views)**: The semantic analytics tier. Encapsulated entirely within a dedicated database schema namespace (`gold`), it exposes heavily decoupled relational views. It flattens hierarchical structural attributes and computes complex data quality and lifecycle tracking metrics (such as publication reporting lags) ready for instant BI (Power BI/Tableau) consumption.
