@@ -97,19 +97,25 @@ Ensure you have the following dependencies installed on your host system:
 ### 2. Prepare Environment Variables
 To decouple your production-ready engine configuration from infrastructure blueprints, the project uses localized environments. Duplicate the provided ecosystem template:
 
+```text
 cp .env.example .env
+```
 
 (Open the newly created .env file in your root folder and modify variables like DB_PASSWORD if necessary, or keep the secure defaults provided).
 
 ### 3. Build & Run the Data Pipeline
 Execute a single orchestrated container setup command to initialize the database cluster, run health validations, map input XML files, and trigger the engine execution:
 
+```text
 docker-compose up --build
+```
 
 ### 4. Execute Automated Test Suites
 To validate atomic pipeline data constraints, model parsing capabilities, and error isolation thresholds within the active Docker layer environment, run:
 
+```text
 docker-compose run data_pipeline python -m pytest -v
+```
 
 ### Inspecting the Data Warehouse
 
@@ -118,7 +124,9 @@ Once the pipeline logs confirm a successful execution cycle, you can easily quer
 **Option A: Via Terminal (No External Tools Required)**
 Access the running container's interactive psql instance directly by typing:
 
+```text
 docker exec -it clinical_trials_postgres psql -U postgres -d clinical_trials_dw
+```
 
 (type \q to exit the prompt)
 
